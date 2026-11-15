@@ -15,6 +15,40 @@ export type Agent = {
   home_etag: string;
   created_at: Timestamp;
   updated_at: Timestamp;
+  native_status?: {
+    runtime: "claude-code" | "codex";
+    project: string;
+    selector: {
+      kind: "project" | "agent" | "profile";
+      name?: string;
+    };
+    machine_id: string;
+    version: string | null;
+    model: string | null;
+    fingerprint: string;
+    configuration: Array<{
+      path: string;
+      sha256: string;
+    }>;
+    skills: Array<string>;
+    mcp_servers: Array<string>;
+    state: "needs_verification" | "needs_attention" | "ready";
+    issues: Array<string>;
+    capabilities: {
+      launch: boolean;
+      notes: boolean;
+      skills: boolean;
+      workflows: false;
+      approval: "native" | "unavailable";
+      usage: boolean;
+    };
+    connected: boolean;
+    verified_at?: string;
+    remote?: {
+      connector_id: string;
+      target_id: string;
+    };
+  };
   external?: {
     source: string;
     kind: string;
@@ -114,6 +148,10 @@ export type DefinitionInput = {
     };
     connected: boolean;
     verified_at?: string;
+    remote?: {
+      connector_id: string;
+      target_id: string;
+    };
   };
   model?: string;
   model_tiers?: {
@@ -198,7 +236,6 @@ export type DefinitionInput = {
   approvals?: "ask" | "never";
   learning?: true | false | "notes";
   checkout?: "pull_request" | "none";
-  cap_mode?: "expected" | "strict";
 };
 
 export type JsonObject = Record<string, unknown>;
@@ -367,7 +404,6 @@ export type RunSummary = {
     needs_usd?: number;
     least_cap_usd?: number;
     suggested_cap_usd?: number;
-    overshoot_bound_usd?: number;
     said: string;
     at: string;
     node?: string | null;
@@ -404,9 +440,9 @@ export type Cost = {
   basis: "charge" | "estimate";
   charge_state?: "held" | "settled" | "released" | null;
   cap_usd?: number | null;
+  free?: true;
   so_far_usd?: number;
   unpriced?: number;
-  overshoot_bound_usd?: number;
   plan?: {
     requests: number;
     tokens: number;
@@ -493,7 +529,6 @@ export type RunCreateInline = {
   mcp_auth?: Record<string, {
     headers: Record<string, string>;
   }>;
-  cap_mode?: "expected" | "strict";
   workflow_first?: boolean;
   learning?: "use";
   repo?: string;
@@ -562,7 +597,6 @@ export type Run = {
   kind: "agentic" | "workflow";
   archived_at: string | null;
   approvals?: "ask" | "never";
-  cap_mode?: "expected" | "strict" | null;
   last_progress_at?: string | null;
   input?: Record<string, unknown> | null;
   file_ids?: Array<string>;
@@ -648,7 +682,6 @@ export type Run = {
     needs_usd?: number;
     least_cap_usd?: number;
     suggested_cap_usd?: number;
-    overshoot_bound_usd?: number;
     said: string;
     at: string;
     node?: string | null;
@@ -722,7 +755,6 @@ export type RunCreate = {
   mcp_auth?: Record<string, {
     headers: Record<string, string>;
   }>;
-  cap_mode?: "expected" | "strict";
   workflow_first?: boolean;
   learning?: "use";
   repo?: string;
@@ -781,7 +813,7 @@ export type TimelineRow = {
   origin?: "server" | "trigger";
   trigger?: {
     id: string;
-    source: "schedule" | "webhook" | "slack" | "github";
+    source: "schedule" | "webhook" | "slack" | "github" | "composio";
     owner: boolean;
     name?: string;
   };
@@ -829,6 +861,7 @@ export type TimelineKind = "thinking" | "text_block" | "tool_use" | "tool_result
 export type TimelineUsage = {
   usd: number | null;
   requests: number | null;
+  free?: true;
   so_far_usd?: number;
   unpriced?: number;
   not_metered?: number;
@@ -885,6 +918,10 @@ export type Capabilities = {
   harnesses?: Array<{
     id: "pi" | "claude-agent" | "codex" | "opencode";
     available: boolean;
+    free_models: Array<{
+      id: string;
+      context_window: number;
+    }>;
     models: Array<string>;
     run_memory_mib: number;
     max_concurrent_runs: number;
@@ -1043,7 +1080,7 @@ export type Features = {
   };
   triggers?: {
     routes: boolean;
-    sources: Array<"schedule" | "webhook" | "github">;
+    sources: Array<"schedule" | "webhook" | "github" | "composio">;
     targets: Array<"start_run" | "message_run">;
     min_every_s: number;
     history_kept: number;
@@ -1082,6 +1119,7 @@ export type Limits = {
     min: Usd;
     max: Usd;
   } | null;
+  free_model_requests?: number;
 };
 
 export type Usd = number;
@@ -1156,6 +1194,10 @@ export type ConnectNativeResponse = {
     };
     connected: boolean;
     verified_at?: string;
+    remote?: {
+      connector_id: string;
+      target_id: string;
+    };
   };
 };
 
@@ -1208,6 +1250,10 @@ export type DisconnectNativeResponse = {
     };
     connected: boolean;
     verified_at?: string;
+    remote?: {
+      connector_id: string;
+      target_id: string;
+    };
   };
 };
 
@@ -1352,6 +1398,10 @@ export type GetNativeResponse = {
     };
     connected: boolean;
     verified_at?: string;
+    remote?: {
+      connector_id: string;
+      target_id: string;
+    };
   } | null;
 };
 
@@ -1382,7 +1432,6 @@ export type ListLearningPromotionsResponse = {
       handed_back: number;
       of?: Array<string>;
       cost_usd?: number | null;
-      skipped_write?: number;
       skipped_tools?: Array<{
         tool: string;
         inputs: number;
@@ -1470,6 +1519,196 @@ export type VerifyNativeResponse = {
     };
     connected: boolean;
     verified_at?: string;
+    remote?: {
+      connector_id: string;
+      target_id: string;
+    };
+  };
+};
+
+/** Complete a source command once under its valid lease (POST /connectors/{connector_id}/commands/{command_id}/complete). */
+export type CompleteRemoteCommandBody = {
+  lease_token: string;
+  result?: unknown;
+  error?: string;
+};
+export type CompleteRemoteCommandResponse = {
+  accepted: true;
+};
+
+/** Create a ten-minute one-use connection code (POST /connectors/enrollment). */
+export type EnrollRemoteConnectorBody = {
+  label?: string;
+  capabilities?: {
+    native_execution?: boolean;
+  };
+};
+export type EnrollRemoteConnectorResponse = {
+  enrollment_token: string;
+  expires_at: string;
+  workspace_id: "local";
+};
+
+/** Import an explicitly selected source-native agent reference (POST /connectors/{connector_id}/import). */
+export type ImportRemoteTargetBody = {
+  target_id: string;
+  name?: string;
+  target: {
+    runtime: "claude-code" | "codex";
+    project: string;
+    selector: {
+      kind: "project" | "agent" | "profile";
+      name?: string;
+    };
+    machine_id: string;
+    version: string | null;
+    model: string | null;
+    fingerprint: string;
+    configuration: Array<{
+      path: string;
+      sha256: string;
+    }>;
+    skills: Array<string>;
+    mcp_servers: Array<string>;
+    state: "needs_verification" | "needs_attention" | "ready";
+    issues: Array<string>;
+    capabilities: {
+      launch: boolean;
+      notes: boolean;
+      skills: boolean;
+      workflows: false;
+      approval: "native" | "unavailable";
+      usage: boolean;
+    };
+    connected: boolean;
+    verified_at?: string;
+    remote?: {
+      connector_id: string;
+      target_id: string;
+    };
+  };
+};
+export type ImportRemoteTargetResponse = {
+  agent_id: string;
+  native: {
+    runtime: "claude-code" | "codex";
+    project: string;
+    selector: {
+      kind: "project" | "agent" | "profile";
+      name?: string;
+    };
+    machine_id: string;
+    version: string | null;
+    model: string | null;
+    fingerprint: string;
+    configuration: Array<{
+      path: string;
+      sha256: string;
+    }>;
+    skills: Array<string>;
+    mcp_servers: Array<string>;
+    state: "needs_verification" | "needs_attention" | "ready";
+    issues: Array<string>;
+    capabilities: {
+      launch: boolean;
+      notes: boolean;
+      skills: boolean;
+      workflows: false;
+      approval: "native" | "unavailable";
+      usage: boolean;
+    };
+    connected: boolean;
+    verified_at?: string;
+    remote?: {
+      connector_id: string;
+      target_id: string;
+    };
+  };
+};
+
+/** List remote source machines and imported agent targets (GET /connectors). */
+export type ListRemoteConnectorsResponse = {
+  connectors: Array<{
+    id: string;
+    connector_id: string;
+    label: string;
+    created_at: string;
+    last_seen_at: string | null;
+    status: "online" | "offline" | "revoked";
+    capabilities: {
+      observe: true;
+      native_execution: boolean;
+    };
+    targets: Array<Record<string, unknown>>;
+  }>;
+};
+
+/** Renew active source leases and claim one command without replay (POST /connectors/{connector_id}/poll). */
+export type PollRemoteConnectorBody = {
+  worker_id: string;
+  active?: Array<{
+    command_id: string;
+    lease_token: string;
+  }>;
+};
+export type PollRemoteConnectorResponse = {
+  commands: Array<Record<string, unknown>>;
+  cancelled: Array<string>;
+  server_time: number;
+  lease_ttl_ms: number;
+};
+
+/** Exchange a one-use enrollment code for a connector-scoped credential (POST /connectors). */
+export type RegisterRemoteConnectorBody = {
+  installation_id: string;
+  operation_id: string;
+  label?: string;
+  capabilities: {
+    native_execution: boolean;
+  };
+};
+export type RegisterRemoteConnectorResponse = {
+  connector: {
+    id: string;
+    connector_id: string;
+    label: string;
+    created_at: string;
+    last_seen_at: string | null;
+    status: "online" | "offline" | "revoked";
+    capabilities: {
+      observe: true;
+      native_execution: boolean;
+    };
+    targets: Array<Record<string, unknown>>;
+  };
+  credential: string;
+  credential_expires_at: string;
+};
+
+/** Append an ordered idempotent native event batch for a valid command lease (POST /connectors/{connector_id}/commands/{command_id}/events). */
+export type RemoteCommandEventsBody = {
+  lease_token: string;
+  sequence: number;
+  events: Array<Record<string, unknown>>;
+};
+export type RemoteCommandEventsResponse = {
+  accepted: true;
+};
+
+/** Revoke a source connector and stop its outstanding commands (DELETE /connectors/{connector_id}). */
+export type RevokeRemoteConnectorResponse = {
+  connector: {
+    id: string;
+    connector_id: string;
+    label: string;
+    created_at: string;
+    last_seen_at: string | null;
+    status: "online" | "offline" | "revoked";
+    capabilities: {
+      observe: true;
+      native_execution: boolean;
+    };
+    targets: Array<Record<string, unknown>>;
   };
 };
 
@@ -2065,11 +2304,12 @@ export type GetLearnedWorkflowReplayResponse = {
   digest: string;
   status: "running" | "done" | "failed";
   inputs: number;
-  answered: number;
-  handed_back: number;
-  failed: number;
-  skipped_write: number;
-  alone: number;
+  outcomes: {
+    answered: number;
+    handed_back: number;
+    failed: number;
+    skipped_write: number;
+  };
   score: {
     n: number;
     agree: number;
@@ -2135,6 +2375,11 @@ export type CreatePairingResponse = {
   id: string;
   code: string;
   expires_at: string;
+};
+
+/** Delete the Composio project's webhook subscription, once no trigger uses it (DELETE /settings/mcp-servers/{name}/composio/subscription). */
+export type DeleteComposioSubscriptionResponse = {
+  deleted: true;
 };
 
 /** Remove a paired computer: its token ends and its socket closes (DELETE /computers/{computer_id}). */
@@ -2225,6 +2470,20 @@ export interface GitHubInstalledParams {
   state?: string;
 }
 
+/** List a saved Composio server's toolkit's events, for a composio trigger (GET /settings/mcp-servers/{name}/composio/events). */
+export type ListComposioEventsResponse = {
+  server: string;
+  toolkit: string;
+  events: Array<{
+    slug: string;
+    name: string;
+    description: string;
+    config: Record<string, unknown>;
+    polled: boolean;
+    instructions?: string;
+  }>;
+};
+
 /** List the actions of a Composio toolkit, for the console's picker; stores nothing (POST /settings/mcp-servers/composio/tools). Its body's string values are secrets: each copy is cut from the answer, and a refusal keeps only its code. */
 export type ListComposioToolsBody = {
   api_key: string;
@@ -2238,6 +2497,23 @@ export type ListComposioToolsResponse = {
     name: string;
     description: string;
   }>;
+};
+
+/** A saved Composio server's triggers, each with its instance's state on Composio (GET /settings/mcp-servers/{name}/composio/triggers). */
+export type ListComposioTriggersResponse = {
+  triggers: Array<{
+    id: string;
+    name: string;
+    enabled: boolean;
+    event: string;
+    instance_id: string;
+    on_composio: "on" | "off" | "missing" | "unknown";
+  }>;
+  subscription: {
+    ours: boolean;
+    webhook_url: string;
+  } | null;
+  composio_error?: string;
 };
 
 /** The values a computer provider's picked keys offer, read from the vendor (GET /computers/{provider}/choices). */
@@ -2359,6 +2635,56 @@ export type PutWorkspaceArchilResponse = {
   region?: string;
   s3Url?: string;
   image?: string;
+};
+
+/** Fire a Composio trigger: a request it checks, no token (POST /hooks/composio/{hook}). */
+export type ReceiveHookComposioResponse = {
+  firings: Array<{
+    key: string;
+    by: "schedule" | "manual" | "webhook" | "github" | "composio";
+    nominal_at: string;
+    status: "due" | "started" | "sent" | "skipped" | "failed" | "missed";
+    at: string;
+    run_id: string | null;
+    reason: string | null;
+    error: {
+      code: string;
+      message: string;
+    } | null;
+    count?: number;
+    attempts?: number;
+    retry_at?: string;
+    catch_up?: true;
+  } | {
+    ok: "duplicate";
+  }>;
+} | {
+  ok: "ignored";
+} | {
+  firings: Array<{
+    key: string;
+    by: "schedule" | "manual" | "webhook" | "github" | "composio";
+    nominal_at: string;
+    status: "due" | "started" | "sent" | "skipped" | "failed" | "missed";
+    at: string;
+    run_id: string | null;
+    reason: string | null;
+    error: {
+      code: string;
+      message: string;
+    } | null;
+    count?: number;
+    attempts?: number;
+    retry_at?: string;
+    catch_up?: true;
+  } | {
+    ok: "duplicate";
+  }>;
+};
+
+/** Rotate the Composio project's webhook subscription's secret, and keep the new one (POST /settings/mcp-servers/{name}/composio/rotate-secret). */
+export type RotateComposioSecretResponse = {
+  rotated: true;
 };
 
 /** Have Composio make a managed MCP server for a toolkit's chosen actions, and save it as an MCP server (PUT /settings/mcp-servers/{name}/composio). Its body's string values are secrets: each copy is cut from the answer, and a refusal keeps only its code. */
@@ -3273,6 +3599,7 @@ export type ApplyTemplateBody = {
   grants?: Array<string>;
   overrides?: {
     model?: string;
+    choice?: string;
     approvals?: "ask" | "never";
   };
 };
@@ -3329,6 +3656,17 @@ export type ImportTemplateResponse = {
     model: {
       tier: "fast" | "balanced" | "strong";
       prefer?: string;
+      fast?: string;
+      strong?: string;
+      choices?: Array<{
+        id: string;
+        label: string;
+        model: string;
+        harness: string;
+        warning: string | null;
+        note: string | null;
+        secrets: Array<string>;
+      }>;
     } | null;
     effort: string | null;
     tools: Array<string> | null;
@@ -3410,6 +3748,17 @@ export type ListTemplatesResponse = {
     model: {
       tier: "fast" | "balanced" | "strong";
       prefer?: string;
+      fast?: string;
+      strong?: string;
+      choices?: Array<{
+        id: string;
+        label: string;
+        model: string;
+        harness: string;
+        warning: string | null;
+        note: string | null;
+        secrets: Array<string>;
+      }>;
     } | null;
     effort: string | null;
     tools: Array<string> | null;
@@ -3635,6 +3984,28 @@ export type CreateTriggerBody = {
         prefix: string;
       }>;
     }>;
+  } | {
+    kind: "composio";
+    server: string;
+    event: string;
+    config: Record<string, unknown>;
+    accept?: Array<{
+      event: string;
+      actions?: Array<string>;
+      where?: Array<{
+        pointer: string;
+        in: Array<unknown>;
+      } | {
+        pointer: string;
+        exists: boolean;
+      } | {
+        pointer: string;
+        prefix: string;
+      }>;
+    }>;
+    instance_id?: string;
+    hook?: string;
+    move_subscription?: true;
   };
   target: {
     kind: "start_run";
@@ -3703,6 +4074,28 @@ export type CreateTriggerResponse = {
         prefix: string;
       }>;
     }>;
+  } | {
+    kind: "composio";
+    server: string;
+    event: string;
+    config: Record<string, unknown>;
+    accept?: Array<{
+      event: string;
+      actions?: Array<string>;
+      where?: Array<{
+        pointer: string;
+        in: Array<unknown>;
+      } | {
+        pointer: string;
+        exists: boolean;
+      } | {
+        pointer: string;
+        prefix: string;
+      }>;
+    }>;
+    instance_id?: string;
+    hook?: string;
+    move_subscription?: true;
   };
   target: {
     kind: "start_run";
@@ -3742,7 +4135,7 @@ export type CreateTriggerResponse = {
   updated_at: string;
   last_firing: {
     key: string;
-    by: "schedule" | "manual" | "webhook" | "github";
+    by: "schedule" | "manual" | "webhook" | "github" | "composio";
     nominal_at: string;
     status: "due" | "started" | "sent" | "skipped" | "failed" | "missed";
     at: string;
@@ -3765,6 +4158,13 @@ export type CreateTriggerResponse = {
 };
 
 /** Delete a trigger and its firings; the runs it started stay (DELETE /triggers/{trigger_id}). */
+export type DeleteTriggerResponse = {
+  deleted: true;
+  composio: {
+    done: false;
+    note: string;
+  };
+};
 
 /** Run it now: one firing per Idempotency-Key (POST /triggers/{trigger_id}/fire). */
 export interface FireTriggerParams {
@@ -3772,7 +4172,7 @@ export interface FireTriggerParams {
 }
 export type FireTriggerResponse = {
   key: string;
-  by: "schedule" | "manual" | "webhook" | "github";
+  by: "schedule" | "manual" | "webhook" | "github" | "composio";
   nominal_at: string;
   status: "due" | "started" | "sent" | "skipped" | "failed" | "missed";
   at: string;
@@ -3792,7 +4192,7 @@ export type FireTriggerResponse = {
 export type ListTriggerFiringsResponse = {
   firings: Array<{
     key: string;
-    by: "schedule" | "manual" | "webhook" | "github";
+    by: "schedule" | "manual" | "webhook" | "github" | "composio";
     nominal_at: string;
     status: "due" | "started" | "sent" | "skipped" | "failed" | "missed";
     at: string;
@@ -3858,6 +4258,28 @@ export type GetTriggerResponse = {
         prefix: string;
       }>;
     }>;
+  } | {
+    kind: "composio";
+    server: string;
+    event: string;
+    config: Record<string, unknown>;
+    accept?: Array<{
+      event: string;
+      actions?: Array<string>;
+      where?: Array<{
+        pointer: string;
+        in: Array<unknown>;
+      } | {
+        pointer: string;
+        exists: boolean;
+      } | {
+        pointer: string;
+        prefix: string;
+      }>;
+    }>;
+    instance_id?: string;
+    hook?: string;
+    move_subscription?: true;
   };
   target: {
     kind: "start_run";
@@ -3897,7 +4319,7 @@ export type GetTriggerResponse = {
   updated_at: string;
   last_firing: {
     key: string;
-    by: "schedule" | "manual" | "webhook" | "github";
+    by: "schedule" | "manual" | "webhook" | "github" | "composio";
     nominal_at: string;
     status: "due" | "started" | "sent" | "skipped" | "failed" | "missed";
     at: string;
@@ -3967,6 +4389,28 @@ export type ListTriggersResponse = {
           prefix: string;
         }>;
       }>;
+    } | {
+      kind: "composio";
+      server: string;
+      event: string;
+      config: Record<string, unknown>;
+      accept?: Array<{
+        event: string;
+        actions?: Array<string>;
+        where?: Array<{
+          pointer: string;
+          in: Array<unknown>;
+        } | {
+          pointer: string;
+          exists: boolean;
+        } | {
+          pointer: string;
+          prefix: string;
+        }>;
+      }>;
+      instance_id?: string;
+      hook?: string;
+      move_subscription?: true;
     };
     target: {
       kind: "start_run";
@@ -4006,7 +4450,7 @@ export type ListTriggersResponse = {
     updated_at: string;
     last_firing: {
       key: string;
-      by: "schedule" | "manual" | "webhook" | "github";
+      by: "schedule" | "manual" | "webhook" | "github" | "composio";
       nominal_at: string;
       status: "due" | "started" | "sent" | "skipped" | "failed" | "missed";
       at: string;
@@ -4084,6 +4528,28 @@ export type UpdateTriggerBody = {
         prefix: string;
       }>;
     }>;
+  } | {
+    kind: "composio";
+    server: string;
+    event: string;
+    config: Record<string, unknown>;
+    accept?: Array<{
+      event: string;
+      actions?: Array<string>;
+      where?: Array<{
+        pointer: string;
+        in: Array<unknown>;
+      } | {
+        pointer: string;
+        exists: boolean;
+      } | {
+        pointer: string;
+        prefix: string;
+      }>;
+    }>;
+    instance_id?: string;
+    hook?: string;
+    move_subscription?: true;
   };
   target?: {
     kind: "start_run";
@@ -4149,6 +4615,28 @@ export type UpdateTriggerResponse = {
         prefix: string;
       }>;
     }>;
+  } | {
+    kind: "composio";
+    server: string;
+    event: string;
+    config: Record<string, unknown>;
+    accept?: Array<{
+      event: string;
+      actions?: Array<string>;
+      where?: Array<{
+        pointer: string;
+        in: Array<unknown>;
+      } | {
+        pointer: string;
+        exists: boolean;
+      } | {
+        pointer: string;
+        prefix: string;
+      }>;
+    }>;
+    instance_id?: string;
+    hook?: string;
+    move_subscription?: true;
   };
   target: {
     kind: "start_run";
@@ -4188,7 +4676,7 @@ export type UpdateTriggerResponse = {
   updated_at: string;
   last_firing: {
     key: string;
-    by: "schedule" | "manual" | "webhook" | "github";
+    by: "schedule" | "manual" | "webhook" | "github" | "composio";
     nominal_at: string;
     status: "due" | "started" | "sent" | "skipped" | "failed" | "missed";
     at: string;
@@ -4206,6 +4694,10 @@ export type UpdateTriggerResponse = {
   hook_url?: string;
   secret?: SecretMeta;
   note?: string;
+  composio?: {
+    done: false;
+    note: string;
+  };
 };
 
 /** Usage by meter over a period (GET /usage). */
@@ -4344,6 +4836,14 @@ export const OPERATIONS: Readonly<Record<string, Operation>> = {
   unarchiveAgent: {"method":"POST","path":"/agents/{agent_id}/unarchive","pathParams":["agent_id"],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"json","secret":false,"publicFields":[],"tagged":false},
   updateDefinition: {"method":"PUT","path":"/agents/{agent_id}/definition","pathParams":["agent_id"],"multiSegment":[],"query":[],"headers":["If-Match"],"body":{"required":true,"types":["application/json"]},"answer":"json","secret":false,"publicFields":[],"tagged":true},
   verifyNative: {"method":"POST","path":"/agents/{agent_id}/native/verify","pathParams":["agent_id"],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"json","secret":false,"publicFields":[],"tagged":false},
+  completeRemoteCommand: {"method":"POST","path":"/connectors/{connector_id}/commands/{command_id}/complete","pathParams":["connector_id","command_id"],"multiSegment":[],"query":[],"headers":[],"body":{"required":true,"types":["application/json"]},"answer":"json","secret":false,"publicFields":[],"tagged":false},
+  enrollRemoteConnector: {"method":"POST","path":"/connectors/enrollment","pathParams":[],"multiSegment":[],"query":[],"headers":[],"body":{"required":true,"types":["application/json"]},"answer":"json","secret":false,"publicFields":[],"tagged":false},
+  importRemoteTarget: {"method":"POST","path":"/connectors/{connector_id}/import","pathParams":["connector_id"],"multiSegment":[],"query":[],"headers":[],"body":{"required":true,"types":["application/json"]},"answer":"json","secret":false,"publicFields":[],"tagged":false},
+  listRemoteConnectors: {"method":"GET","path":"/connectors","pathParams":[],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"json","secret":false,"publicFields":[],"tagged":false},
+  pollRemoteConnector: {"method":"POST","path":"/connectors/{connector_id}/poll","pathParams":["connector_id"],"multiSegment":[],"query":[],"headers":[],"body":{"required":true,"types":["application/json"]},"answer":"json","secret":false,"publicFields":[],"tagged":false},
+  registerRemoteConnector: {"method":"POST","path":"/connectors","pathParams":[],"multiSegment":[],"query":[],"headers":[],"body":{"required":true,"types":["application/json"]},"answer":"json","secret":false,"publicFields":[],"tagged":false},
+  remoteCommandEvents: {"method":"POST","path":"/connectors/{connector_id}/commands/{command_id}/events","pathParams":["connector_id","command_id"],"multiSegment":[],"query":[],"headers":[],"body":{"required":true,"types":["application/json"]},"answer":"json","secret":false,"publicFields":[],"tagged":false},
+  revokeRemoteConnector: {"method":"DELETE","path":"/connectors/{connector_id}","pathParams":["connector_id"],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"json","secret":false,"publicFields":[],"tagged":false},
   createFile: {"method":"POST","path":"/files","pathParams":[],"multiSegment":[],"query":["path","content_type","sha256"],"headers":["Idempotency-Key"],"body":{"required":true,"types":["application/json","application/octet-stream","*/*"]},"answer":"json","secret":false,"publicFields":[],"tagged":false},
   deleteFile: {"method":"DELETE","path":"/files/{file_id}","pathParams":["file_id"],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"none","secret":false,"publicFields":[],"tagged":false},
   getFile: {"method":"GET","path":"/files/{file_id}","pathParams":["file_id"],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"json","secret":false,"publicFields":[],"tagged":false},
@@ -4370,6 +4870,7 @@ export const OPERATIONS: Readonly<Record<string, Operation>> = {
   writeLearningFile: {"method":"PUT","path":"/agents/{agent_id}/learning/files/{file}","pathParams":["agent_id","file"],"multiSegment":[],"query":[],"headers":["If-Match","If-None-Match"],"body":{"required":true,"types":["text/markdown","text/plain","application/json"]},"answer":"text","secret":false,"publicFields":[],"tagged":true},
   connectGitHub: {"method":"POST","path":"/integrations/github/connect","pathParams":[],"multiSegment":[],"query":[],"headers":[],"body":{"required":false,"types":["application/json"]},"answer":"json","secret":false,"publicFields":[],"tagged":false},
   createPairing: {"method":"POST","path":"/computers/pairings","pathParams":[],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"json","secret":false,"publicFields":[],"tagged":false},
+  deleteComposioSubscription: {"method":"DELETE","path":"/settings/mcp-servers/{name}/composio/subscription","pathParams":["name"],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"json","secret":false,"publicFields":[],"tagged":false},
   deleteComputer: {"method":"DELETE","path":"/computers/{computer_id}","pathParams":["computer_id"],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"none","secret":false,"publicFields":[],"tagged":false},
   deleteWorkspaceArchil: {"method":"DELETE","path":"/workspace/archil","pathParams":[],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"json","secret":false,"publicFields":[],"tagged":false},
   disconnectGitHub: {"method":"DELETE","path":"/integrations/github","pathParams":[],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"json","secret":false,"publicFields":[],"tagged":false},
@@ -4379,10 +4880,14 @@ export const OPERATIONS: Readonly<Record<string, Operation>> = {
   getWorkspaceArchil: {"method":"GET","path":"/workspace/archil","pathParams":[],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"json","secret":false,"publicFields":[],"tagged":false},
   gitHubCallback: {"method":"GET","path":"/integrations/github/callback","pathParams":[],"multiSegment":[],"query":["code","state"],"headers":[],"body":null,"answer":"none","secret":false,"publicFields":[],"tagged":false},
   gitHubInstalled: {"method":"GET","path":"/integrations/github/installed","pathParams":[],"multiSegment":[],"query":["installation_id","setup_action","state"],"headers":[],"body":null,"answer":"none","secret":false,"publicFields":[],"tagged":false},
+  listComposioEvents: {"method":"GET","path":"/settings/mcp-servers/{name}/composio/events","pathParams":["name"],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"json","secret":false,"publicFields":[],"tagged":false},
   listComposioTools: {"method":"POST","path":"/settings/mcp-servers/composio/tools","pathParams":[],"multiSegment":[],"query":[],"headers":[],"body":{"required":true,"types":["application/json"]},"answer":"json","secret":true,"publicFields":["toolkit"],"tagged":false},
+  listComposioTriggers: {"method":"GET","path":"/settings/mcp-servers/{name}/composio/triggers","pathParams":["name"],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"json","secret":false,"publicFields":[],"tagged":false},
   listComputerChoices: {"method":"GET","path":"/computers/{provider}/choices","pathParams":["provider"],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"json","secret":false,"publicFields":[],"tagged":false},
   listComputers: {"method":"GET","path":"/computers","pathParams":[],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"json","secret":false,"publicFields":[],"tagged":false},
   putWorkspaceArchil: {"method":"PUT","path":"/workspace/archil","pathParams":[],"multiSegment":[],"query":[],"headers":[],"body":{"required":true,"types":["application/json"]},"answer":"json","secret":false,"publicFields":[],"tagged":false},
+  receiveHook_composio: {"method":"POST","path":"/hooks/composio/{hook}","pathParams":["hook"],"multiSegment":[],"query":[],"headers":[],"body":{"required":true,"types":["*/*"]},"answer":"json","secret":false,"publicFields":[],"tagged":false},
+  rotateComposioSecret: {"method":"POST","path":"/settings/mcp-servers/{name}/composio/rotate-secret","pathParams":["name"],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"json","secret":false,"publicFields":[],"tagged":false},
   saveComposioServer: {"method":"PUT","path":"/settings/mcp-servers/{name}/composio","pathParams":["name"],"multiSegment":[],"query":[],"headers":[],"body":{"required":true,"types":["application/json"]},"answer":"json","secret":true,"publicFields":["toolkit","tools.[]","user_id"],"tagged":false},
   saveComputerKeys: {"method":"PUT","path":"/computers/{provider}/keys","pathParams":["provider"],"multiSegment":[],"query":[],"headers":[],"body":{"required":true,"types":["application/json"]},"answer":"json","secret":false,"publicFields":[],"tagged":false},
   signOutChatGPT: {"method":"DELETE","path":"/settings/chatgpt","pathParams":[],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"json","secret":false,"publicFields":[],"tagged":false},
@@ -4439,7 +4944,7 @@ export const OPERATIONS: Readonly<Record<string, Operation>> = {
   getToolSettings: {"method":"GET","path":"/settings/tools","pathParams":[],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"json","secret":false,"publicFields":[],"tagged":false},
   putToolSettings: {"method":"PUT","path":"/settings/tools","pathParams":[],"multiSegment":[],"query":[],"headers":[],"body":{"required":true,"types":["application/json"]},"answer":"json","secret":false,"publicFields":[],"tagged":false},
   createTrigger: {"method":"POST","path":"/triggers","pathParams":[],"multiSegment":[],"query":[],"headers":["Idempotency-Key"],"body":{"required":true,"types":["application/json"]},"answer":"json","secret":false,"publicFields":[],"tagged":false},
-  deleteTrigger: {"method":"DELETE","path":"/triggers/{trigger_id}","pathParams":["trigger_id"],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"none","secret":false,"publicFields":[],"tagged":false},
+  deleteTrigger: {"method":"DELETE","path":"/triggers/{trigger_id}","pathParams":["trigger_id"],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"json","secret":false,"publicFields":[],"tagged":false},
   fireTrigger: {"method":"POST","path":"/triggers/{trigger_id}/fire","pathParams":["trigger_id"],"multiSegment":[],"query":[],"headers":["Idempotency-Key"],"body":null,"answer":"json","secret":false,"publicFields":[],"tagged":false},
   listTriggerFirings: {"method":"GET","path":"/triggers/{trigger_id}/firings","pathParams":["trigger_id"],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"json","secret":false,"publicFields":[],"tagged":false},
   getTrigger: {"method":"GET","path":"/triggers/{trigger_id}","pathParams":["trigger_id"],"multiSegment":[],"query":[],"headers":[],"body":null,"answer":"json","secret":false,"publicFields":[],"tagged":false},
@@ -4494,6 +4999,24 @@ export function resources(call: Call) {
       update: (agentId: string, body: UpdateDefinitionBody, params?: UpdateDefinitionParams, options?: RequestOptions): Promise<Tagged<UpdateDefinitionResponse>> => call("updateDefinition", [agentId], body, params, options),
       /** Check native CLI and sign-in without a paid model call (POST /agents/{agent_id}/native/verify). */
       verifyNative: (agentId: string, options?: RequestOptions): Promise<VerifyNativeResponse> => call("verifyNative", [agentId], undefined, undefined, options),
+    },
+    connectors: {
+      /** Complete a source command once under its valid lease (POST /connectors/{connector_id}/commands/{command_id}/complete). */
+      completeRemoteCommand: (connectorId: string, commandId: string, body: CompleteRemoteCommandBody, options?: RequestOptions): Promise<CompleteRemoteCommandResponse> => call("completeRemoteCommand", [connectorId, commandId], body, undefined, options),
+      /** Create a ten-minute one-use connection code (POST /connectors/enrollment). */
+      enrollRemoteConnector: (body: EnrollRemoteConnectorBody, options?: RequestOptions): Promise<EnrollRemoteConnectorResponse> => call("enrollRemoteConnector", [], body, undefined, options),
+      /** Import an explicitly selected source-native agent reference (POST /connectors/{connector_id}/import). */
+      importRemoteTarget: (connectorId: string, body: ImportRemoteTargetBody, options?: RequestOptions): Promise<ImportRemoteTargetResponse> => call("importRemoteTarget", [connectorId], body, undefined, options),
+      /** List remote source machines and imported agent targets (GET /connectors). */
+      listRemoteConnectors: (options?: RequestOptions): Promise<ListRemoteConnectorsResponse> => call("listRemoteConnectors", [], undefined, undefined, options),
+      /** Renew active source leases and claim one command without replay (POST /connectors/{connector_id}/poll). */
+      pollRemoteConnector: (connectorId: string, body: PollRemoteConnectorBody, options?: RequestOptions): Promise<PollRemoteConnectorResponse> => call("pollRemoteConnector", [connectorId], body, undefined, options),
+      /** Exchange a one-use enrollment code for a connector-scoped credential (POST /connectors). */
+      registerRemoteConnector: (body: RegisterRemoteConnectorBody, options?: RequestOptions): Promise<RegisterRemoteConnectorResponse> => call("registerRemoteConnector", [], body, undefined, options),
+      /** Append an ordered idempotent native event batch for a valid command lease (POST /connectors/{connector_id}/commands/{command_id}/events). */
+      remoteCommandEvents: (connectorId: string, commandId: string, body: RemoteCommandEventsBody, options?: RequestOptions): Promise<RemoteCommandEventsResponse> => call("remoteCommandEvents", [connectorId, commandId], body, undefined, options),
+      /** Revoke a source connector and stop its outstanding commands (DELETE /connectors/{connector_id}). */
+      revokeRemoteConnector: (connectorId: string, options?: RequestOptions): Promise<RevokeRemoteConnectorResponse> => call("revokeRemoteConnector", [connectorId], undefined, undefined, options),
     },
     files: {
       /** Reserve an upload (POST /files). */
@@ -4552,6 +5075,8 @@ export function resources(call: Call) {
     local: {
       /** A code that pairs a person's own computer with this server (POST /computers/pairings). */
       createPairing: (options?: RequestOptions): Promise<CreatePairingResponse> => call("createPairing", [], undefined, undefined, options),
+      /** Delete the Composio project's webhook subscription, once no trigger uses it (DELETE /settings/mcp-servers/{name}/composio/subscription). */
+      deleteComposioSubscription: (name: string, options?: RequestOptions): Promise<DeleteComposioSubscriptionResponse> => call("deleteComposioSubscription", [name], undefined, undefined, options),
       /** Remove a paired computer: its token ends and its socket closes (DELETE /computers/{computer_id}). */
       deleteComputer: (computerId: string, options?: RequestOptions): Promise<void> => call("deleteComputer", [computerId], undefined, undefined, options),
       /** Turn Mode 2 off: run folders on this server's own disk (DELETE /workspace/archil). */
@@ -4566,14 +5091,22 @@ export function resources(call: Call) {
       getGitHubConnection: (options?: RequestOptions): Promise<GetGitHubConnectionResponse> => call("getGitHubConnection", [], undefined, undefined, options),
       /** Whether run folders are on Archil disks (Mode 2), the settings, and whether its keys are saved (GET /workspace/archil). */
       getWorkspaceArchil: (options?: RequestOptions): Promise<GetWorkspaceArchilResponse> => call("getWorkspaceArchil", [], undefined, undefined, options),
+      /** List a saved Composio server's toolkit's events, for a composio trigger (GET /settings/mcp-servers/{name}/composio/events). */
+      listComposioEvents: (name: string, options?: RequestOptions): Promise<ListComposioEventsResponse> => call("listComposioEvents", [name], undefined, undefined, options),
       /** List the actions of a Composio toolkit, for the console's picker; stores nothing (POST /settings/mcp-servers/composio/tools). */
       listComposioTools: (body: ListComposioToolsBody, options?: RequestOptions): Promise<ListComposioToolsResponse> => call("listComposioTools", [], body, undefined, options),
+      /** A saved Composio server's triggers, each with its instance's state on Composio (GET /settings/mcp-servers/{name}/composio/triggers). */
+      listComposioTriggers: (name: string, options?: RequestOptions): Promise<ListComposioTriggersResponse> => call("listComposioTriggers", [name], undefined, undefined, options),
       /** The values a computer provider's picked keys offer, read from the vendor (GET /computers/{provider}/choices). */
       listComputerChoices: (provider: string, options?: RequestOptions): Promise<ListComputerChoicesResponse> => call("listComputerChoices", [provider], undefined, undefined, options),
       /** Settings → Computers: the kinds of computer this server offers, each provider and whether its keys are saved (GET /computers). */
       listComputers: (options?: RequestOptions): Promise<ListComputersResponse> => call("listComputers", [], undefined, undefined, options),
       /** Turn Mode 2 on: run folders on Archil disks, one per agent (PUT /workspace/archil). */
       putWorkspaceArchil: (body: PutWorkspaceArchilBody, options?: RequestOptions): Promise<PutWorkspaceArchilResponse> => call("putWorkspaceArchil", [], body, undefined, options),
+      /** Fire a Composio trigger: a request it checks, no token (POST /hooks/composio/{hook}). */
+      receiveHookComposio: (hook: string, body: RawBody, options?: BodyOptions): Promise<ReceiveHookComposioResponse> => call("receiveHook_composio", [hook], body, undefined, options),
+      /** Rotate the Composio project's webhook subscription's secret, and keep the new one (POST /settings/mcp-servers/{name}/composio/rotate-secret). */
+      rotateComposioSecret: (name: string, options?: RequestOptions): Promise<RotateComposioSecretResponse> => call("rotateComposioSecret", [name], undefined, undefined, options),
       /** Have Composio make a managed MCP server for a toolkit's chosen actions, and save it as an MCP server (PUT /settings/mcp-servers/{name}/composio). */
       saveComposioServer: (name: string, body: SaveComposioServerBody, options?: RequestOptions): Promise<SaveComposioServerResponse> => call("saveComposioServer", [name], body, undefined, options),
       /** Save a computer provider's keys, sealed (PUT /computers/{provider}/keys). */
@@ -4703,7 +5236,7 @@ export function resources(call: Call) {
       /** Make a trigger: a schedule or a signed webhook that starts a capped run of an agent, or messages a run (POST /triggers). */
       create: (body: CreateTriggerBody, params?: CreateTriggerParams, options?: RequestOptions): Promise<CreateTriggerResponse> => call("createTrigger", [], body, params, options),
       /** Delete a trigger and its firings; the runs it started stay (DELETE /triggers/{trigger_id}). */
-      delete: (triggerId: string, options?: RequestOptions): Promise<void> => call("deleteTrigger", [triggerId], undefined, undefined, options),
+      delete: (triggerId: string, options?: RequestOptions): Promise<DeleteTriggerResponse | undefined> => call("deleteTrigger", [triggerId], undefined, undefined, options),
       /** Run it now: one firing per Idempotency-Key (POST /triggers/{trigger_id}/fire). */
       fire: (triggerId: string, params: FireTriggerParams, options?: RequestOptions): Promise<FireTriggerResponse> => call("fireTrigger", [triggerId], undefined, params, options),
       /** The trigger's last 200 firings, newest first (GET /triggers/{trigger_id}/firings). */

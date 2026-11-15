@@ -39,6 +39,15 @@ export const HOST_RESULT_MAX_CHARS = 120_000;
  */
 export const CONTENT_FILTERED = "content_filter: the model provider stopped this answer";
 
+/**
+ * What a run on a person's ChatGPT plan ends with once the plan's limit is reached (its 429): the plan's own limit, never
+ * the run's spend cap, so nothing here can raise it and nothing tries again. A harness's model proxy answers its client
+ * these words (`ProviderPolicy.finalError`) and the harness halts the turn with them; a host shows them as they are.
+ */
+export const PLAN_LIMIT_WORDS = "Your ChatGPT plan's limit is reached. Manage usage in your ChatGPT settings, then run it again.";
+/** The code the proxy's answer carries beside PLAN_LIMIT_WORDS. */
+export const PLAN_LIMIT_CODE = "plan_limit_reached";
+
 /** A tool the host gives a session. */
 export interface HostTool {
   name: string;
@@ -72,10 +81,13 @@ export interface HostTool {
 export interface NestedCalls {
   /** Call tool `name` (a session tool, by its host name) with `args`, under `key`: stable for the same call in a rerun
    *  of the calling one. A deny answers `refused` with the gate's words; a park holds until the session lets go, then
-   *  rejects. */
-  call(name: string, args: Record<string, unknown>, key: string): Promise<NestedResult>;
-  /** `value` the first time `key` is asked in this call, and that first value again in every rerun of the call. */
-  memo<T extends JsonValue>(key: string, value: T): Promise<T>;
+   *  rejects. Given `signal`, the call runs on it as well as on the calling one's: a caller that cuts one part of its work
+   *  (a learned workflow's node whose sibling failed) cuts that part's call. */
+  call(name: string, args: Record<string, unknown>, key: string, signal?: AbortSignal): Promise<NestedResult>;
+  /** `value` the first time `key` is asked in this call, and that first value again in every rerun of the call. Given a
+   *  function, it is called only the first time: a rerun reads the recorded value and never calls it, so work it does (a
+   *  model's request, a paid decision) is done and paid for once. */
+  memo<T extends JsonValue>(key: string, value: T | (() => T | Promise<T>)): Promise<T>;
 }
 
 /** A nested call's answer. */
@@ -168,8 +180,6 @@ export interface ModelRequest {
   /** The most input tokens the request can be billed for (the model proxy's `inputTokensMaxOf`: the body's UTF-8 bytes
    *  plus what the provider adds), undefined when it was not measured. */
   inputTokensMax?: number;
-  /** Its `inputTokensMax` is its provider's count, not its bytes (ProxyRequest.inputTokensCounted). */
-  inputTokensCounted?: true;
   /** The most output tokens the request asks for, when its body says (the proxy's policy reads it). */
   outputTokensAsked?: number;
   /** The least output it may be limited to and still answer: its answer's 1,024 tokens, plus the least thinking its
@@ -192,7 +202,7 @@ export interface ModelRequest {
    *  host's own request beside the harness's (`host`). */
   side?: true;
   /** On the session's model but no answer of the turn (a title, a summary, a child's request): booked as any request, but
-   *  never one of the session's recent requests for the cap's expected pricing, read or kept. */
+   *  no answer the host keeps its wrap-up's reserve back for. */
   unanswered?: true;
   /** It carries the host's note (ModelPort.note) in its body: the note is delivered once this request is admitted.
    *  `inputTokensMaxWithoutNote`: its input measured as its client sent it, before the note was placed. */
@@ -228,6 +238,9 @@ export interface ModelUsage {
    *  nothing was sent and nothing charged, at usd 0. Its record says so, so no reader takes it for a $0 charge or an
    *  unpriced one. */
   givenBack?: true;
+  /** On a free model (its known price $0 for every token): booked a known $0 however it ended, `usd` 0, set by the
+   *  runner's booking (Admitted.free) on what it tells of the request's end, for a reader to say why it cost nothing. */
+  free?: true;
   /** The ids the provider's response gave the request, by header name (the provider's `request-id`, a gateway's call
    *  id such as LiteLLM's `x-litellm-call-id`): what joins this booking to the provider's own log. A cut request has
    *  them only if its response had begun. */

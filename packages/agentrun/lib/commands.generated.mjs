@@ -490,6 +490,262 @@ export const COMMANDS = [
   },
   {
     "command": [
+      "connectors",
+      "complete-remote-command"
+    ],
+    "operationId": "completeRemoteCommand",
+    "method": "POST",
+    "path": "/connectors/{connector_id}/commands/{command_id}/complete",
+    "pathParams": [
+      "connector_id",
+      "command_id"
+    ],
+    "multiSegment": [],
+    "query": [],
+    "headers": [],
+    "bodyFlags": [
+      {
+        "name": "lease_token",
+        "type": "string",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "error",
+        "type": "string",
+        "required": false,
+        "description": ""
+      }
+    ],
+    "hasBody": true,
+    "bodyRequired": true,
+    "bodyTypes": [
+      "application/json"
+    ],
+    "secretBody": false,
+    "raw": false,
+    "summary": "Complete a source command once under its valid lease"
+  },
+  {
+    "command": [
+      "connectors",
+      "enroll-remote-connector"
+    ],
+    "operationId": "enrollRemoteConnector",
+    "method": "POST",
+    "path": "/connectors/enrollment",
+    "pathParams": [],
+    "multiSegment": [],
+    "query": [],
+    "headers": [],
+    "bodyFlags": [
+      {
+        "name": "label",
+        "type": "string",
+        "required": false,
+        "description": ""
+      }
+    ],
+    "hasBody": true,
+    "bodyRequired": true,
+    "bodyTypes": [
+      "application/json"
+    ],
+    "secretBody": false,
+    "raw": false,
+    "summary": "Create a ten-minute one-use connection code"
+  },
+  {
+    "command": [
+      "connectors",
+      "import-remote-target"
+    ],
+    "operationId": "importRemoteTarget",
+    "method": "POST",
+    "path": "/connectors/{connector_id}/import",
+    "pathParams": [
+      "connector_id"
+    ],
+    "multiSegment": [],
+    "query": [],
+    "headers": [],
+    "bodyFlags": [
+      {
+        "name": "target_id",
+        "type": "string",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "required": false,
+        "description": ""
+      }
+    ],
+    "hasBody": true,
+    "bodyRequired": true,
+    "bodyTypes": [
+      "application/json"
+    ],
+    "secretBody": false,
+    "raw": false,
+    "summary": "Import an explicitly selected source-native agent reference"
+  },
+  {
+    "command": [
+      "connectors",
+      "list-remote-connectors"
+    ],
+    "operationId": "listRemoteConnectors",
+    "method": "GET",
+    "path": "/connectors",
+    "pathParams": [],
+    "multiSegment": [],
+    "query": [],
+    "headers": [],
+    "bodyFlags": [],
+    "hasBody": false,
+    "bodyRequired": false,
+    "bodyTypes": [],
+    "secretBody": false,
+    "raw": false,
+    "summary": "List remote source machines and imported agent targets"
+  },
+  {
+    "command": [
+      "connectors",
+      "poll-remote-connector"
+    ],
+    "operationId": "pollRemoteConnector",
+    "method": "POST",
+    "path": "/connectors/{connector_id}/poll",
+    "pathParams": [
+      "connector_id"
+    ],
+    "multiSegment": [],
+    "query": [],
+    "headers": [],
+    "bodyFlags": [
+      {
+        "name": "worker_id",
+        "type": "string",
+        "required": true,
+        "description": ""
+      }
+    ],
+    "hasBody": true,
+    "bodyRequired": true,
+    "bodyTypes": [
+      "application/json"
+    ],
+    "secretBody": false,
+    "raw": false,
+    "summary": "Renew active source leases and claim one command without replay"
+  },
+  {
+    "command": [
+      "connectors",
+      "register-remote-connector"
+    ],
+    "operationId": "registerRemoteConnector",
+    "method": "POST",
+    "path": "/connectors",
+    "pathParams": [],
+    "multiSegment": [],
+    "query": [],
+    "headers": [],
+    "bodyFlags": [
+      {
+        "name": "installation_id",
+        "type": "string",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "operation_id",
+        "type": "string",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "label",
+        "type": "string",
+        "required": false,
+        "description": ""
+      }
+    ],
+    "hasBody": true,
+    "bodyRequired": true,
+    "bodyTypes": [
+      "application/json"
+    ],
+    "secretBody": false,
+    "raw": false,
+    "summary": "Exchange a one-use enrollment code for a connector-scoped credential"
+  },
+  {
+    "command": [
+      "connectors",
+      "remote-command-events"
+    ],
+    "operationId": "remoteCommandEvents",
+    "method": "POST",
+    "path": "/connectors/{connector_id}/commands/{command_id}/events",
+    "pathParams": [
+      "connector_id",
+      "command_id"
+    ],
+    "multiSegment": [],
+    "query": [],
+    "headers": [],
+    "bodyFlags": [
+      {
+        "name": "lease_token",
+        "type": "string",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "sequence",
+        "type": "integer",
+        "required": true,
+        "description": ""
+      }
+    ],
+    "hasBody": true,
+    "bodyRequired": true,
+    "bodyTypes": [
+      "application/json"
+    ],
+    "secretBody": false,
+    "raw": false,
+    "summary": "Append an ordered idempotent native event batch for a valid command lease"
+  },
+  {
+    "command": [
+      "connectors",
+      "revoke-remote-connector"
+    ],
+    "operationId": "revokeRemoteConnector",
+    "method": "DELETE",
+    "path": "/connectors/{connector_id}",
+    "pathParams": [
+      "connector_id"
+    ],
+    "multiSegment": [],
+    "query": [],
+    "headers": [],
+    "bodyFlags": [],
+    "hasBody": false,
+    "bodyRequired": false,
+    "bodyTypes": [],
+    "secretBody": false,
+    "raw": false,
+    "summary": "Revoke a source connector and stop its outstanding commands"
+  },
+  {
+    "command": [
       "files",
       "create"
     ],
@@ -1287,6 +1543,28 @@ export const COMMANDS = [
   {
     "command": [
       "local",
+      "delete-composio-subscription"
+    ],
+    "operationId": "deleteComposioSubscription",
+    "method": "DELETE",
+    "path": "/settings/mcp-servers/{name}/composio/subscription",
+    "pathParams": [
+      "name"
+    ],
+    "multiSegment": [],
+    "query": [],
+    "headers": [],
+    "bodyFlags": [],
+    "hasBody": false,
+    "bodyRequired": false,
+    "bodyTypes": [],
+    "secretBody": false,
+    "raw": false,
+    "summary": "Delete the Composio project's webhook subscription, once no trigger uses it"
+  },
+  {
+    "command": [
+      "local",
       "delete-computer"
     ],
     "operationId": "deleteComputer",
@@ -1389,6 +1667,50 @@ export const COMMANDS = [
   {
     "command": [
       "local",
+      "list-composio-events"
+    ],
+    "operationId": "listComposioEvents",
+    "method": "GET",
+    "path": "/settings/mcp-servers/{name}/composio/events",
+    "pathParams": [
+      "name"
+    ],
+    "multiSegment": [],
+    "query": [],
+    "headers": [],
+    "bodyFlags": [],
+    "hasBody": false,
+    "bodyRequired": false,
+    "bodyTypes": [],
+    "secretBody": false,
+    "raw": false,
+    "summary": "List a saved Composio server's toolkit's events, for a composio trigger"
+  },
+  {
+    "command": [
+      "local",
+      "list-composio-triggers"
+    ],
+    "operationId": "listComposioTriggers",
+    "method": "GET",
+    "path": "/settings/mcp-servers/{name}/composio/triggers",
+    "pathParams": [
+      "name"
+    ],
+    "multiSegment": [],
+    "query": [],
+    "headers": [],
+    "bodyFlags": [],
+    "hasBody": false,
+    "bodyRequired": false,
+    "bodyTypes": [],
+    "secretBody": false,
+    "raw": false,
+    "summary": "A saved Composio server's triggers, each with its instance's state on Composio"
+  },
+  {
+    "command": [
+      "local",
       "list-computer-choices"
     ],
     "operationId": "listComputerChoices",
@@ -1427,6 +1749,52 @@ export const COMMANDS = [
     "secretBody": false,
     "raw": false,
     "summary": "Settings → Computers: the kinds of computer this server offers, each provider and whether its keys are saved"
+  },
+  {
+    "command": [
+      "local",
+      "receive-hook-composio"
+    ],
+    "operationId": "receiveHook_composio",
+    "method": "POST",
+    "path": "/hooks/composio/{hook}",
+    "pathParams": [
+      "hook"
+    ],
+    "multiSegment": [],
+    "query": [],
+    "headers": [],
+    "bodyFlags": [],
+    "hasBody": true,
+    "bodyRequired": true,
+    "bodyTypes": [
+      "*/*"
+    ],
+    "secretBody": false,
+    "raw": false,
+    "summary": "Fire a Composio trigger: a request it checks, no token"
+  },
+  {
+    "command": [
+      "local",
+      "rotate-composio-secret"
+    ],
+    "operationId": "rotateComposioSecret",
+    "method": "POST",
+    "path": "/settings/mcp-servers/{name}/composio/rotate-secret",
+    "pathParams": [
+      "name"
+    ],
+    "multiSegment": [],
+    "query": [],
+    "headers": [],
+    "bodyFlags": [],
+    "hasBody": false,
+    "bodyRequired": false,
+    "bodyTypes": [],
+    "secretBody": false,
+    "raw": false,
+    "summary": "Rotate the Composio project's webhook subscription's secret, and keep the new one"
   },
   {
     "command": [
@@ -1846,16 +2214,6 @@ export const COMMANDS = [
         "type": "string",
         "required": false,
         "description": "Run at a quote's terms. A different `effort` or `max_cost_usd` than the quote's is `409 quote_invalid`."
-      },
-      {
-        "name": "cap_mode",
-        "type": "string",
-        "enum": [
-          "expected",
-          "strict"
-        ],
-        "required": false,
-        "description": "How the run's cap (`max_cost_usd`) prices each model request's input. `expected` (the default): the input the previous request of its conversation reported read from or written to the cache, at the cache-read price, when that request ended less than 4 minutes before; the rest of its input (the previous request's input after the cache, and what the conversation grew by since, a token a byte) at the input price, the cache write's when dearer. With no such request, all of it at that price. Output is limited to what the cap leaves, so output never passes it; a cache miss can, by at most the request's bound (its input uncached less its input expected), served as the run's `cost.overshoot_bound_usd` while it is in flight; its real cost is booked, and the timeline says so. `strict`: every input token at the input or cache-write price, the worst case: no request passes the cap, and a run pauses sooner. Only with a cap. Absent: the agent's (its definition's `cap_mode`), else expected. 422 not_allowed for a run with no cap."
       },
       {
         "name": "workflow_first",
@@ -2376,16 +2734,6 @@ export const COMMANDS = [
         "description": "Run at a quote's terms. A different `effort` or `max_cost_usd` than the quote's is `409 quote_invalid`."
       },
       {
-        "name": "cap_mode",
-        "type": "string",
-        "enum": [
-          "expected",
-          "strict"
-        ],
-        "required": false,
-        "description": "How the run's cap (`max_cost_usd`) prices each model request's input. `expected` (the default): the input the previous request of its conversation reported read from or written to the cache, at the cache-read price, when that request ended less than 4 minutes before; the rest of its input (the previous request's input after the cache, and what the conversation grew by since, a token a byte) at the input price, the cache write's when dearer. With no such request, all of it at that price. Output is limited to what the cap leaves, so output never passes it; a cache miss can, by at most the request's bound (its input uncached less its input expected), served as the run's `cost.overshoot_bound_usd` while it is in flight; its real cost is booked, and the timeline says so. `strict`: every input token at the input or cache-write price, the worst case: no request passes the cap, and a run pauses sooner. Only with a cap. Absent: the agent's (its definition's `cap_mode`), else expected. 422 not_allowed for a run with no cap."
-      },
-      {
         "name": "workflow_first",
         "type": "boolean",
         "required": false,
@@ -2542,7 +2890,7 @@ export const COMMANDS = [
           "whole"
         ],
         "required": false,
-        "description": "`whole`: each `tool_use` row carries its call's arguments (`tool_input`) and each `tool_result` row the head of its output to 8000 characters (`tool_result_text`), both through the run's redaction, for a reader that grades the run (a template eval). Its rows are another page sequence: a cursor (`after`, `Last-Event-ID`) from one read goes with the same `calls`."
+        "description": "`whole`: each `tool_use` row carries its call's arguments (`tool_input`) and each `tool_result` row the head of its output to 8000 characters (`tool_result_text`; a web call's every url, only its long texts cut), both through the run's redaction, for a reader that grades the run (a template eval). Its rows are another page sequence: a cursor (`after`, `Last-Event-ID`) from one read goes with the same `calls`."
       }
     ],
     "headers": [

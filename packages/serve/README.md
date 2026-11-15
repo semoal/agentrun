@@ -75,7 +75,8 @@ place: a token from the environment stays out of the logs. `DIR/.token`'s token 
 it; a later start prints `AGENTRUN_API_KEY=<in DIR/.token>`, to read it there. With `AGENTRUN_ACCOUNTS=0` the `Open`
 link carries a launch code this start made at random (`?launch=<code>`), never the token. `AGENTRUN_PUBLIC_URL`, when set, is the
 address people open (a container's published port, or a proxy's URL): the printed `Open` link and `AGENTRUN_BASE_URL`
-use it.
+use it. `AGENTRUN_FREE_MODEL_REQUESTS` (default 60) is the most requests on free models a run makes
+([a limit on free requests](#a-limit-on-free-requests)).
 
 ## Sandbox in 60 seconds
 
@@ -283,7 +284,9 @@ and a 200 says it can work, and the platforms here take one path.
 
 A run's runner renews its claim on the run every 10 s, for a claim of 30 s. A runner that stops, or cannot renew in
 time, writes nothing more to the run, and the store refuses any write under a claim the run has moved past. Once the
-claim lapses another runner claims the run and resumes it from its journal. `agentrun-serve runner --check --data DIR --name N`
+claim lapses another runner claims the run and resumes it from its journal. A run's own computer doesn't survive a
+runner loss, a crash or a server stop (the claim that resumes the run starts a new one, and says so on the timeline and
+to the model), and the agent's own computer, a persistent setting, does. `agentrun-serve runner --check --data DIR --name N`
 (or `AGENTRUN_RUNNER_NAME=N` in place of `--name`) says whether the runner named `N` has a fresh heartbeat: it exits 0
 when it does and 1 when it does not, and 2 when no name is given. Name a runner you start yourself with
 `agentrun-serve runner --data DIR --name N`.
@@ -636,10 +639,10 @@ set, click, type, key, scroll, drag, nav), each step saying its route and whethe
 ending with the window's new state. Without it, observe is a screenshot and act's steps are raw input at its pixels.
 `computer_script` runs JavaScript in an isolate in this server, with a typed `computer` object as its only binding (no
 network, no keys): a known sequence of steps is one script, and it returns only what the next decision needs. Its
-declarations are `spec/computer/computer.d.ts`, generated from `packages/computer/src/surface/api.ts`. On pi, a run
-with a desktop or a phone also has pi's code mode (`codemode`), whose scripts call the run's tools and have the same
-`computer` bound; the call is held to the kind's setting. In Codex's code mode, a script's call of a computer tool
-answers the tool's value as JSON. `computerMcp` (`src/workspace/computer-mcp.ts`) serves the same tools to an MCP
+declarations are `spec/computer/computer.d.ts`, generated from `packages/computer/src/surface/api.ts`. The computer's
+tools are the run's own, so a `codemode` script calls them as `tools.computer_act(...)` and the rest: each is a call of
+its own, held to the kind's setting and recorded with its computer calls, and it answers the tool's value. In Codex's
+code mode, a script's call of a computer tool answers the tool's value as JSON. `computerMcp` (`src/workspace/computer-mcp.ts`) serves the same tools to an MCP
 client, each answer with its value as `structuredContent`.
 
 A kind with no provider, a provider that does not serve the kind, or a provider whose required keys are not saved is
@@ -752,11 +755,11 @@ passes the binding's conformance cases (below) needs no change here.
   key's workspace (`agentrun-box-<recipe hash>`) and waits once, saying it is pulling. Its sandbox and desktop are
   ready once the keys work. Modal's descriptor says `prepareImage` too, and it answers our public box image by its
   registry tag, which Modal pulls at a computer's first create in a workspace, so a Modal sandbox is ready once the keys
-  work. This server can't put the image in an E2B account yet, so Settings shows E2B not ready, an agent's save warns,
-  and a run's start refuses it (409) before any computer is made. An E2B desktop mounts
-  the folder as well (it has files and exec), so it is refused in the same words. Docker's sandbox is refused, since it
-  cannot mount the disk, and so is Daytona's, since Archil's client hangs on its sandboxes. A boxd sandbox takes no
-  mount yet, so it is refused in both modes; a boxd desktop runs in either.
+  work. E2B's says `prepareImage` as well, and it answers our public box template by name
+  (`<publisher>/agentrun-archil-<recipe hash>`, which the release builds and makes public), with no call, so an E2B
+  sandbox and desktop are ready once the key works; the desktop mounts the folder too (it has files and exec). Docker's
+  sandbox is refused, since it cannot mount the disk, and so is Daytona's, since Archil's client hangs on its sandboxes.
+  A boxd sandbox takes no mount yet, so it is refused in both modes; a boxd desktop runs in either.
 
   The PUT is a secret write, so it takes the owner's signed-in session. A server with none to give it (API only, or
   `AGENTRUN_ACCOUNTS=0` reached beyond loopback) is set where it is started instead: `AGENTRUN_ARCHIL_REGION` and
@@ -824,10 +827,9 @@ DAYTONA_API_KEY=... python3 packages/computer/box/build-daytona.py   # prints sn
 A Daytona computer takes no Archil mount, so this server never holds a run's folder on one (see Mode 2 above). A
 Daytona [box](#sandbox) never reads it.
 
-A desktop, a phone and a browser run in either mode, except E2B's desktop in Mode 2, which would mount the owner's disk
-and needs Archil's image in your vendor account first (see Mode 2 above). The run's folder is at
+A desktop, a phone and a browser run in either mode. The run's folder is at
 `/workspace` in every computer that mounts it: a sandbox always, and a desktop whose provider mounts the mode's folder
-(Docker's in Mode 1, Agent37's in Mode 2). A phone and a browser never mount it. On a desktop that mounts it, the
+(Docker's in Mode 1, Agent37's and E2B's in Mode 2). A phone and a browser never mount it. On a desktop that mounts it, the
 `shell` group's commands and the programs `processes.start` opens start in `/workspace` too, as `bash` does.
 
 **Where `bash` runs.** It follows the mount:
@@ -1102,15 +1104,18 @@ them. None of them goes around the run's tool settings:
   `await tools.<name>(args)` calls are each the tool's own call, under `<callId>/s<n>`, answered one at a time. A tool is
   named as `ALL_TOOLS` gives it; the description shows the first three (`tools.<name>`) and says to leave off the prefix
   a harness shows in the model's own tool list (`hands_`, `mcp__hands__`). The
-  sandbox has the tools and nothing else of the run: no environment, key, file, network or timer. A script runs at most
+  sandbox has the tools and nothing else of the run: no environment, key, file, network or timer. A tool's image (a
+  screenshot) reaches the script with its pixels: `image(shot)` shows it to the model, and a returned one is the
+  answer's image, its data never in the answer's text. A script runs at most
   10 minutes in 256 MiB. A call that needs approval parks the run, and the script follows Codex's rule. Once a person
   answers, the script runs again from its start, and the calls it already made answer from their records. The parked
-  call runs once (or is refused), its outcome is the script's answer, and the rest of the script does not run. A
+  call runs once (or is refused), its outcome is the script's answer, and the rest of the script does not run. The
+  answer lists each call before it with its result as the script read it: a JSON value as itself, never quoted. A
   refused call ends the script with the refusal. A call cut off by a crash is told as possibly done and never run again.
 
 A paid call made through `tools_call` or a script is held at its price before it is sent and settled once, as a direct
-call is, so the cap holds it. On pi with a desktop or a phone, `codemode` is pi's own code mode (see
-[Computers](#computers)), offered in place of this one.
+call is, so the cap holds it. A run with a desktop or a phone has this same `codemode`, its computer's tools among
+the ones a script calls (see [Computers](#computers)).
 
 ### Subagents
 
@@ -1773,9 +1778,12 @@ An agent grants a saved server's tool by its catalog name, `mcp:<server>/<tool>`
 (`"tools": ["mcp:github/list_issues"]`). A save lists each server it grants a tool of, once, and checks each grant
 against that listing: a server that is not saved, or can't be listed right now, is `422` naming it ("save again once it
 answers"; an edit that grants nothing new from it keeps the agent's current pin for it instead), a tool it does not list
-is `422` naming the server's tools, and so is a name whose wire name,
-`mcp__<server>__<tool>`, is over 52 characters, or a tool whose `x-mcp-header` declaration cannot be sent (on a
-property not reached through `properties` alone, not a string, integer or boolean, not a header name, or declared twice). pi, claude-agent and codex run them (`features.mcp_client.harnesses`); on
+is `422` naming the server's tools, and so is a tool whose `x-mcp-header` declaration cannot be sent (on a
+property not reached through `properties` alone, not a string, integer or boolean, not a header name, or declared twice).
+A harness calls a tool `mcp__<server>__<tool>`; one whose name is past the 52 characters every harness's tool names
+share (Composio's `SLACK_FETCH_MESSAGE_THREAD_FROM_A_CONVERSATION` on a server `slack`) is called by that name cut to
+fit with a hash of its catalog name after it, and its rows, settings and approvals still name it `mcp:<server>/<tool>`.
+Two grants that would be called by one such name are `422`, naming both. pi, claude-agent and codex run them (`features.mcp_client.harnesses`); on
 another harness the save warns that they are not bound there yet, and a run is refused. On claude-agent, a run with MCP
 tools has the Claude CLI's own tool search on: the server's tools reach the model only once its ToolSearch finds them,
 and the run's other tools load as they always do. A workflow's nodes bind no MCP
@@ -1793,8 +1801,7 @@ action it runs and deny could target none. Reads mark it `grantable: false` with
 each of these providers has a direct mode. The list is closed: a meta tool it doesn't know is an MCP tool like any other,
 asked by default.
 A saved server's read also gives each tool its `grant_problems` when a grant of it is refused where it would run, in the words the
-save's `422` says: under `*` for every harness (its wire name `mcp__<server>__<tool>` is past the 52 characters every harness's
-tool names share), or under a harness id when that harness's own MCP client would drop or retype its schema.
+save's `422` says, under a harness id when that harness's own MCP client would drop or retype its schema.
 
 - **Pinned.** The save keeps each granted tool on the new revision as the server listed it then (its name,
   description, input schema, annotations and price) with the server's URL then, shown as the agent's `mcp_pin` (never
@@ -2253,7 +2260,7 @@ failed, 2 when nothing ran. The runner, the graders and the report are in
 | `GET /health` | Without a credential: whether the store reads and the disk has room ([capacity and health](#capacity-and-health)). |
 | `GET /openapi.json` | Without a credential: this API as an OpenAPI 3.1 document, the `agentrun.v2/0` contract (vendored in `src/openapi/`, its source in `info`) with this server's own routes marked `x-agentrun-serve` the operations it answers `501` marked `x-agentrun-serve-unsupported`, and a contract operation that takes more than the contract gives marked `x-agentrun-serve-changed` with each change named; `links.openapi` in capabilities points at it. |
 | `GET /capabilities` | Without a credential. `backend: local`, every feature flag present and true only when it works; `tools`, the tools an agentic revision may name; `workflows`, what a workflow revision's model nodes get and, in `workflows.decisions.providers`, the decision providers its typed questions run on; `models`, where models come from and the model of each tier. |
-| `POST /agents`, `GET /agents`, `GET /agents/{id}` | `POST` takes `{definition, skills?, note?}` and makes the agent with its first revision, current. A definition has `instructions` (an agentic revision) or `workflow` (a workflow revision, checked by the DSL first), and `name`, `description`, `model` and `thinking` (agentic only), `harness` ([harnesses](#harnesses)), `place` ([place](#place)), `tools`, `tool_settings` ([search and fetch](#search-and-fetch)), `skills` (names; each `<name>/SKILL.md` is in `skills`) and `version`, which is the number the revision gets, and `max_cost_usd`, the agent's default cap (an agentic agent's or a workflow's), kept by an edit that leaves it out and cleared only by 0, and `cap_mode`, how such a cap prices a request, `expected` or `strict` ([spend cap](#spend-cap)), and `output_schema` (agentic only, at most 64 KiB): the JSON Schema the final answer's last fenced json block meets, which a completed run's `result.output` then holds (null when the answer doesn't meet it), kept by an edit that leaves it out. A template's answer schema is set here at apply, and a run a trigger starts is handed that trigger's last completed `result.output` after its message. `checkout` (agentic only): `pull_request` has the server check out, before each run's first turn, the pull request the run's GitHub event names, in `repo/` at its head with its base and merge base, using a read-only token of its GitHub App that the agent never holds ([GitHub triggers](#github-triggers-connect-github)); `none` clears it, and an edit that leaves it out keeps it. A field the store does not keep (`input_schema`) is `422 input_invalid` by name, and so is a definition that can never run here; one this host cannot run yet saves with `warnings` ([models](#models)). The ETag (`home_etag`) is the current revision's id. `GET /agents/{id}` adds `tools`, the tools its current revision grants with each one's provider ([search and fetch](#search-and-fetch)). |
+| `POST /agents`, `GET /agents`, `GET /agents/{id}` | `POST` takes `{definition, skills?, note?}` and makes the agent with its first revision, current. A definition has `instructions` (an agentic revision) or `workflow` (a workflow revision, checked by the DSL first), and `name`, `description`, `model` and `thinking` (agentic only), `harness` ([harnesses](#harnesses)), `place` ([place](#place)), `tools`, `tool_settings` ([search and fetch](#search-and-fetch)), `skills` (names; each `<name>/SKILL.md` is in `skills`) and `version`, which is the number the revision gets, and `max_cost_usd`, the agent's default cap (an agentic agent's or a workflow's), kept by an edit that leaves it out and cleared only by 0 ([spend cap](#spend-cap)), and `output_schema` (agentic only, at most 64 KiB): the JSON Schema the final answer's last fenced json block meets, which a completed run's `result.output` then holds (null when the answer doesn't meet it), kept by an edit that leaves it out. A template's answer schema is set here at apply, and a run a trigger starts is handed that trigger's last completed `result.output` after its message. `checkout` (agentic only): `pull_request` has the server check out, before each run's first turn, the pull request the run's GitHub event names, in `repo/` at its head with its base and merge base, using a read-only token of its GitHub App that the agent never holds ([GitHub triggers](#github-triggers-connect-github)); `none` clears it, and an edit that leaves it out keeps it. A field the store does not keep (`input_schema`) is `422 input_invalid` by name, and so is a definition that can never run here; one this host cannot run yet saves with `warnings` ([models](#models)). The ETag (`home_etag`) is the current revision's id. `GET /agents/{id}` adds `tools`, the tools its current revision grants with each one's provider ([search and fetch](#search-and-fetch)). |
 | `PUT /agents/{id}/definition` | The same body, checked [the same way](#models): a new revision, its parent the current one, made current. Without `skills` the current revision's skill files carry over. A definition that is the current revision already writes nothing, so a PUT sent twice makes one revision. An agent's id, name and description stay those it was made with. `If-Match` that is not the current ETag is `412 precondition_failed`; the store compares it again inside the commit, so of two edits that read the same revision exactly one lands. The contract's body is taken too: the definition itself, with `If-Match` required (`412` without it) and `definition.version` greater than the current one (`422`). Any such version is taken, and always makes a new revision, the same definition included; the revision is numbered as this server numbers them, the next, and the answer says which; the route reads a body holding `definition` as this one, any other as the contract's. |
 | `GET /agents/{id}/revisions` | The agent's revisions, newest first: `revision`, `version`, `parent`, `kind`, `current`, `note`, `created_at` and the `definition`. |
 | `POST /agents/{id}/current` | `{revision}`: one of the agent's revisions becomes current again. |
@@ -3027,7 +3034,7 @@ with the token, an archived agent's too:
   `learned_not_active`. Its files are checked again as a restore checks them, and its workflow as the learning checker
   checks a run's draft against the agent's tools and gate (400 with `problems`), then as any workflow revision's save
   (422, or 409 `agent_not_runnable`). The new agent's `tools` are the ones its call nodes call, and it keeps the source
-  agent's policy as it is now (its `tool_settings`, `approvals`, `max_cost_usd` and `cap_mode`), never more. Its id is the
+  agent's policy as it is now (its `tool_settings`, `approvals` and `max_cost_usd`), never more. Its id is the
   workflow's name, with `-2`, `-3` and on past an agent's id or name already here, and its name `name` or the same. It
   answers 201 with the agent; the learned workflow stays in the folder, unchanged. It takes the owner's password session
   alone, as an approval does.
@@ -3070,30 +3077,17 @@ definition's `max_cost_usd` above 0 sets that default, and 0 clears it (no defau
 leaves the field out keeps the agent's default, as it keeps its harness and place: leaving a field out never removes a
 spend limit. A workflow definition keeps one the same way. The cap is checked in the run's own process
 before each model request, the agent's and a compaction's alike, on every harness: what the run has spent so far, plus
-what each request still in flight is held at, plus what this request is expected to cost must stay within it, or the
+what each request still in flight is held at, plus the most this request can cost must stay within it, or the
 request is not sent and the run pauses ([below](#a-run-paused-at-its-cap)). The cap is a hard stop for everything but
 the charge of a monid call priced by usage, which can pass the estimate it was held at: when it does, the run stops at
 once ([monid](#monid)). A request costs its input, plus the output it
-is sent with at the output price, plus any fee its tokens do not show (below). How its input is priced is the run's
-`cap_mode`: the run's own (`POST /agents/{id}/runs` with `cap_mode`), else its agent's (a definition's `cap_mode`, kept by
-an edit that leaves it out), else `expected`; only a run with a cap takes one (`422 not_allowed` otherwise).
-
-- `expected`: priced from the previous request of its conversation, as that request's usage reported it. The input it
-  read from the cache or wrote to it (`cache_read_input_tokens` and `cache_creation_input_tokens` on Anthropic's API,
-  `input_tokens_details.cached_tokens` on the Responses API) at the cache-read price, if that request ended less than 4
-  minutes before (Anthropic keeps a cache 5); the rest (its input after the cache, plus what the conversation grew by
-  since, one token per byte) at the higher of the input and cache-write prices. With no previous request in hand, or one
-  older than 4 minutes, all of the input at that price. On claude-agent, codex and opencode the previous request is the
-  session's last on the same model in the run's current process, so a run's first request after a restart is priced
-  with nothing cached; on pi it is the conversation's last answer. Output never passes the cap (below); a request that
-  misses the cache can, by at most its bound: its input at full price less its input expected. The run's
-  `cost.overshoot_bound_usd` serves the bound of the requests in flight. A request's real cost is always booked, never
-  clipped: a run that passed its cap so is not failed for it, its timeline says `Went $X over its cap on a cache miss (at
-  most $Y).`, and its next request is refused, so it pauses at its cap as usual. A request whose cost never comes in (cut,
-  stopped, lost) counts at what it was held at, its expected cost, in this process and after a restart alike.
-- `strict`: every input token at the higher of the input and cache-write prices (the provider may bill any of the input as
-  a cache write), the worst case: no request passes the cap, and a run whose requests read the cache pauses well before
-  it has spent its cap.
+is sent with at the output price, plus any fee its tokens do not show (below). Its input is priced at its worst case:
+every input token at the higher of the input and cache-write prices, since the provider may bill any of it as a cache
+write and a cache can miss at any request. So no request passes the cap, a cache miss included: a request costs at most
+what it was held at. A request whose cost never comes in (cut, stopped, lost) counts at that hold, in this process and
+after a restart alike. A run whose requests read the cache spends less than its holds, so it pauses before it has
+spent its whole cap; output is clamped to what is left after the input (below), so a run is parked only when what is
+left cannot pay its next request's whole input and a least answer.
 
 Near its cap, a run's model is told once to finish: when what is left (the cap less what was spent and what requests
 in flight are held at) is under three times the run's typical request, the next request of the run's own model carries
@@ -3151,20 +3145,22 @@ gateway or any other base), and its bound is that count plus the tool-use prompt
 that fails or takes over 3 seconds leaves the byte bound; the request is never held up or refused for it.
 
 **The smallest cap that works.** The byte bound reads text as about two to three times the tokens it is billed as, and a
-step is sent only when the run's spend plus that step's least (its input bound, priced by the cap mode, and a 1,024-token
-answer) fits. So a small cap pauses a run well before it has spent it. Measured on a pi desktop run on Sonnet ($3 / $15,
-cache write $3.75, cache read $0.30 a million) through the dispatch's own system prompt and tools, five requests (four
-screenshots, then the answer), spending about $0.04 in all:
+step is sent only when the run's spend plus that step's least (its whole input bound at the cache-write price, and a
+1,024-token answer) fits. So a small cap pauses a run well before it has spent it. Measured on a pi desktop run on Sonnet
+($3 / $15, cache write $3.75, cache read $0.30 a million) through the dispatch's own system prompt and tools (read,
+write, edit, the desktop's and `codemode`), five requests (four screenshots, then the answer), spending about $0.04 in
+all. Through a gateway the first request's byte bound is 11,496 tokens, so it needs $0.058 and the whole run $0.117;
+straight to Anthropic the count is one recorded from a real desktop run on Sonnet (3,146 tokens at first), so it needs
+$0.030 and $0.083:
 
-| Cap mode | Route | First request needs | Five-step run needs | Each further step |
-| --- | --- | --- | --- | --- |
-| `strict` | Through a gateway (OpenRouter): the byte bound | $0.06 | $0.12 | about $0.013 |
-| `strict` | Straight to Anthropic: Anthropic's count | $0.03 | $0.09 | about $0.012 |
-| `expected` (the default) | Either | as `strict` | $0.06 | about $0.007 |
+| Route | First request needs | Five-step run needs | Each further step |
+| --- | --- | --- | --- |
+| Through a gateway (OpenRouter): the byte bound | $0.06 | $0.12 | about $0.013 |
+| Straight to Anthropic: Anthropic's count | $0.03 | $0.09 | about $0.012 |
 
-In `strict` mode every step's whole input is priced at the cache-write price. In `expected` mode a step after the first is priced from what the session's previous request read from the cache, so a five-step run needs about $0.06 by either route, and about $0.007 a further step; the first request is priced as in `strict`, so its figure is the same. A claude-agent run's first request is of the same size (the pinned
+A claude-agent run's first request is of the same size (the pinned
 CLI's measured 6,926 bytes with five tools: $0.04 for its first request through a gateway). A cap below these pauses at
-once with `Not sent: ... the next step needs at least $X`, and a raise to that figure sends it on. (In `strict` mode through a gateway, a run a cent under the five-step figure is not parked before its last step: the cap's wrap-up refuses its last screenshot, and the run answers from what it has.)
+once with `Not sent: ... the next step needs at least $X`, and a raise to that figure sends it on. A run a cent under the five-step figure parks before its last step by either route, its words naming that figure.
 `packages/serve/test/cap-minimum.test.mjs` holds these figures to what the cap does. A request in flight holds what it was admitted at until it answers, so requests
 sent side by side cannot pass the cap together. Spent so far is read from the run's store each time its process starts, so it
 survives a restart, plus each response since, and with them each charge a paid tool booked (a monid endpoint's call, which is itself
@@ -3264,6 +3260,22 @@ refused was never sent: the run's usage counts no request for it, and a run whos
 request sent". A reply the limit cut short says so on the run's timeline: "The reply stopped at 1,500 tokens: all that
 the $0.15 left of the run's $0.50 cap could buy."
 
+### A limit on free requests
+
+A request on a free model costs $0, so no dollar cap can stop one: a free model is one whose catalog price is all zeros
+(an OpenRouter `:free` model and the like, as `harnesses[].free_models` lists them; an OpenRouter router is none, since
+it bills the model it picks), with no fee beside the request. Its provider's shared daily quota is what a looping run
+burns. So a run has a limit on those requests: 60, or `AGENTRUN_FREE_MODEL_REQUESTS` (a whole number above 0; anything
+else refuses the server's start and the runner's). ChatGPT-plan requests don't count. Capabilities'
+`limits.free_model_requests` says it, and the console says "free model: up to 60 requests" beside the cap of an agent
+on a free model. A run may make that many; the next is not sent, and the run ends `failed` as one its
+cap ends, its error `spend_cap_reached`: "Not sent: this run reached its 60-request limit for free models." (the number
+is the limit). No raise lifts it, and it holds capped or not, on every harness: pi, claude-agent, codex, opencode and a
+workflow's agent nodes. Every such request of the run counts, its own model's, its subagents', its side calls' (a
+compaction, a title), and one a crash cut, which is booked at $0, a known cost; a paid request, a paid tool call and a
+workflow's decision never count, and are never refused by it. The count is read from the run's booking records at each
+request, so a restart or a claim moved to another runner keeps it.
+
 ### A run paused at its cap
 
 A refusal for room (what is left of the cap cannot buy the next request's least) pauses the run instead of ending it: the
@@ -3328,12 +3340,12 @@ A workflow run is capped by the same checks, on the run's one ledger (the kernel
 
 | Step | Held at | Where |
 |---|---|---|
-| A model node's request | its expected cost, as an agentic run's request | the run's ledger |
+| A model node's request | its worst case, as an agentic run's request | the run's ledger |
 | A call node's `llm` call | the same | the same, as a side request |
 | A call node's paid tool call (Parallel's search or extract) | its fee | the run's ledger, as an agentic run's |
 | A decision on Parallel | its list price for one request, $0.001 | before the driver admits it (`decision-cap.ts`) |
 | A decision on Jev | TypeSafe's published price, $0.042 a million input tokens, one token a byte of its state and questions | the same |
-| A decision on an OpenRouter Decisions model | its catalog price: per request, per image, per input token, and per output token for 256 a question (`expected`) or the catalog's most (`strict`) | the same |
+| A decision on an OpenRouter Decisions model | its catalog price: per request, per image, per input token, and per output token for the catalog's most | the same |
 
 What a decision charged is booked in the run's store as the cap counted it, so a run opened again counts it once. A step
 the cap has no room for is not sent and waits where it stands: the run is `input_required`, state `waiting`, with
